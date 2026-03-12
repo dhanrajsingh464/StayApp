@@ -140,7 +140,7 @@ class RoomAllocationService {
 
 
 // Main Application
-public class UseCase6RoomAllocationService {
+public class StayApp {
 
     public static void main(String[] args) {
 
