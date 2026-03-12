@@ -201,7 +201,7 @@ class AddOnServiceManager {
 
 
 // Main Application
-public class UseCase7AddOnServiceSelection {
+public class StayApp {
 
     public static void main(String[] args) {
 
