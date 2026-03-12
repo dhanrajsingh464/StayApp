@@ -193,7 +193,7 @@ class RoomAllocationService {
 
 
 // Main Application
-public class UseCase8BookingHistoryReport {
+public class StayApp {
 
     public static void main(String[] args) {
 
