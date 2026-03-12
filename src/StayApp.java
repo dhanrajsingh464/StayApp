@@ -1,5 +1,6 @@
-
+```java
 import java.util.*;
+import java.io.*;
 
 // Custom Exception
 class InvalidBookingException extends Exception {
@@ -9,7 +10,9 @@ class InvalidBookingException extends Exception {
 }
 
 // Reservation class
-class Reservation {
+class Reservation implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private String reservationId;
     private String guestName;
@@ -23,33 +26,16 @@ class Reservation {
         this.roomType = roomType;
     }
 
-    public String getReservationId() {
-        return reservationId;
-    }
+    public String getReservationId() { return reservationId; }
+    public String getGuestName() { return guestName; }
+    public String getRoomType() { return roomType; }
 
-    public String getGuestName() {
-        return guestName;
-    }
+    public void setRoomId(String roomId) { this.roomId = roomId; }
+    public String getRoomId() { return roomId; }
 
-    public String getRoomType() {
-        return roomType;
-    }
+    public boolean isCancelled() { return cancelled; }
 
-    public void setRoomId(String roomId) {
-        this.roomId = roomId;
-    }
-
-    public String getRoomId() {
-        return roomId;
-    }
-
-    public boolean isCancelled() {
-        return cancelled;
-    }
-
-    public void cancelReservation() {
-        cancelled = true;
-    }
+    public void cancelReservation() { cancelled = true; }
 
     public void displayReservation() {
         System.out.println("Reservation ID: " + reservationId +
@@ -86,14 +72,14 @@ class BookingRequestQueue {
 
 
 // Thread-safe Room Inventory
-class RoomInventory {
+class RoomInventory implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private HashMap<String, Integer> inventory;
 
     public RoomInventory() {
-
         inventory = new HashMap<>();
-
         inventory.put("Single Room", 2);
         inventory.put("Double Room", 2);
         inventory.put("Suite Room", 1);
@@ -125,7 +111,9 @@ class RoomInventory {
 
 
 // Booking History
-class BookingHistory {
+class BookingHistory implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private List<Reservation> confirmedBookings = new ArrayList<>();
 
@@ -135,17 +123,6 @@ class BookingHistory {
 
     public List<Reservation> getBookings() {
         return confirmedBookings;
-    }
-
-    public Reservation findReservation(String reservationId) {
-
-        for (Reservation r : confirmedBookings) {
-            if (r.getReservationId().equals(reservationId)) {
-                return r;
-            }
-        }
-
-        return null;
     }
 }
 
@@ -186,6 +163,48 @@ class RoomAllocationService {
 }
 
 
+// Persistence Service
+class PersistenceService {
+
+    private static final String FILE_NAME = "hotel_state.dat";
+
+    public void saveState(RoomInventory inventory, BookingHistory history) {
+
+        try (ObjectOutputStream out =
+                     new ObjectOutputStream(new FileOutputStream(FILE_NAME))) {
+
+            out.writeObject(inventory);
+            out.writeObject(history);
+
+            System.out.println("\nSystem state saved successfully.");
+
+        } catch (IOException e) {
+            System.out.println("Error saving system state.");
+        }
+    }
+
+    public Object[] loadState() {
+
+        try (ObjectInputStream in =
+                     new ObjectInputStream(new FileInputStream(FILE_NAME))) {
+
+            RoomInventory inventory = (RoomInventory) in.readObject();
+            BookingHistory history = (BookingHistory) in.readObject();
+
+            System.out.println("System state restored from file.");
+
+            return new Object[]{inventory, history};
+
+        } catch (Exception e) {
+
+            System.out.println("No saved state found. Starting fresh.");
+
+            return null;
+        }
+    }
+}
+
+
 // Concurrent Booking Processor (Thread)
 class ConcurrentBookingProcessor extends Thread {
 
@@ -212,17 +231,11 @@ class ConcurrentBookingProcessor extends Thread {
 
             Reservation reservation = requestQueue.getNextRequest();
 
-            if (reservation == null) {
-                break;
-            }
+            if (reservation == null) break;
 
             String roomType = reservation.getRoomType();
 
             try {
-
-                if (!inventory.isValidRoomType(roomType)) {
-                    throw new InvalidBookingException("Invalid Room Type: " + roomType);
-                }
 
                 inventory.decreaseAvailability(roomType);
 
@@ -252,28 +265,32 @@ public class StayApp {
 
     public static void main(String[] args) {
 
-        String appName = "Book My Stay - Hotel Booking System";
-        String version = "Version 11.0 (Concurrent Booking Simulation)";
+        System.out.println("=====================================");
+        System.out.println("Book My Stay - Persistence & Recovery");
+        System.out.println("Version 12.0");
+        System.out.println("=====================================");
 
-        System.out.println("=====================================");
-        System.out.println("Welcome to " + appName);
-        System.out.println(version);
-        System.out.println("=====================================");
+        PersistenceService persistenceService = new PersistenceService();
+
+        RoomInventory inventory;
+        BookingHistory history;
+
+        Object[] state = persistenceService.loadState();
+
+        if (state != null) {
+            inventory = (RoomInventory) state[0];
+            history = (BookingHistory) state[1];
+        } else {
+            inventory = new RoomInventory();
+            history = new BookingHistory();
+        }
 
         BookingRequestQueue requestQueue = new BookingRequestQueue();
-        RoomInventory inventory = new RoomInventory();
-        BookingHistory history = new BookingHistory();
         RoomAllocationService allocationService = new RoomAllocationService();
 
-        // Multiple booking requests
-        requestQueue.addRequest(new Reservation("RES-101", "Alice", "Single Room"));
-        requestQueue.addRequest(new Reservation("RES-102", "Bob", "Double Room"));
-        requestQueue.addRequest(new Reservation("RES-103", "Charlie", "Suite Room"));
-        requestQueue.addRequest(new Reservation("RES-104", "David", "Single Room"));
-        requestQueue.addRequest(new Reservation("RES-105", "Emma", "Double Room"));
-        requestQueue.addRequest(new Reservation("RES-106", "Frank", "Suite Room"));
-
-        System.out.println("\n===== Concurrent Booking Processing =====");
+        requestQueue.addRequest(new Reservation("RES-201", "Alice", "Single Room"));
+        requestQueue.addRequest(new Reservation("RES-202", "Bob", "Double Room"));
+        requestQueue.addRequest(new Reservation("RES-203", "Charlie", "Suite Room"));
 
         ConcurrentBookingProcessor t1 =
                 new ConcurrentBookingProcessor(requestQueue, inventory, history, allocationService);
@@ -281,17 +298,12 @@ public class StayApp {
         ConcurrentBookingProcessor t2 =
                 new ConcurrentBookingProcessor(requestQueue, inventory, history, allocationService);
 
-        ConcurrentBookingProcessor t3 =
-                new ConcurrentBookingProcessor(requestQueue, inventory, history, allocationService);
-
         t1.start();
         t2.start();
-        t3.start();
 
         try {
             t1.join();
             t2.join();
-            t3.join();
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -299,7 +311,9 @@ public class StayApp {
         BookingReportService reportService = new BookingReportService();
         reportService.displayAllBookings(history.getBookings());
 
-        System.out.println("\nAll concurrent bookings processed safely.");
+        persistenceService.saveState(inventory, history);
+
+        System.out.println("\nSystem shutdown complete.");
     }
 }
 
