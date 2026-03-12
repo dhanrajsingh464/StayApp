@@ -267,7 +267,7 @@ class CancellationService {
 
 
 // Main Application
-public class UseCase10BookingCancellation {
+public class StayApp {
 
     public static void main(String[] args) {
 
