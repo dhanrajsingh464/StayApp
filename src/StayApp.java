@@ -1,12 +1,22 @@
 import java.util.*;
 
+// Custom Exception
+class InvalidBookingException extends Exception {
+
+    public InvalidBookingException(String message) {
+        super(message);
+    }
+}
+
+
 // Reservation class
 class Reservation {
 
     private String reservationId;
     private String guestName;
     private String roomType;
-    private String roomId;   // NEW: store allocated room id
+    private String roomId;
+    private boolean cancelled = false;
 
     public Reservation(String reservationId, String guestName, String roomType) {
         this.reservationId = reservationId;
@@ -26,19 +36,28 @@ class Reservation {
         return roomType;
     }
 
-    public void setRoomId(String roomId) {   // NEW
+    public void setRoomId(String roomId) {
         this.roomId = roomId;
     }
 
-    public String getRoomId() {   // NEW
+    public String getRoomId() {
         return roomId;
+    }
+
+    public boolean isCancelled() {
+        return cancelled;
+    }
+
+    public void cancelReservation() {
+        cancelled = true;
     }
 
     public void displayReservation() {
         System.out.println("Reservation ID: " + reservationId +
                 " | Guest: " + guestName +
                 " | Room Type: " + roomType +
-                " | Room ID: " + roomId);
+                " | Room ID: " + roomId +
+                " | Status: " + (cancelled ? "Cancelled" : "Confirmed"));
     }
 }
 
@@ -77,12 +96,28 @@ class RoomInventory {
         inventory.put("Suite Room", 1);
     }
 
+    public boolean isValidRoomType(String roomType) {
+        return inventory.containsKey(roomType);
+    }
+
     public int getAvailability(String roomType) {
         return inventory.getOrDefault(roomType, 0);
     }
 
-    public void decreaseAvailability(String roomType) {
-        inventory.put(roomType, inventory.get(roomType) - 1);
+    public void decreaseAvailability(String roomType) throws InvalidBookingException {
+
+        int available = getAvailability(roomType);
+
+        if (available <= 0) {
+            throw new InvalidBookingException("No rooms available for " + roomType);
+        }
+
+        inventory.put(roomType, available - 1);
+    }
+
+    // Inventory rollback
+    public void increaseAvailability(String roomType) {
+        inventory.put(roomType, inventory.get(roomType) + 1);
     }
 }
 
@@ -99,6 +134,18 @@ class BookingHistory {
     public List<Reservation> getBookings() {
         return confirmedBookings;
     }
+
+    // Find reservation for cancellation
+    public Reservation findReservation(String reservationId) {
+
+        for (Reservation r : confirmedBookings) {
+            if (r.getReservationId().equals(reservationId)) {
+                return r;
+            }
+        }
+
+        return null;
+    }
 }
 
 
@@ -114,28 +161,6 @@ class BookingReportService {
         }
 
         System.out.println("============================");
-    }
-
-    public void generateSummary(List<Reservation> reservations) {
-
-        System.out.println("\n===== Booking Summary Report =====");
-
-        Map<String, Integer> roomTypeCount = new HashMap<>();
-
-        for (Reservation reservation : reservations) {
-
-            String roomType = reservation.getRoomType();
-
-            roomTypeCount.put(roomType,
-                    roomTypeCount.getOrDefault(roomType, 0) + 1);
-        }
-
-        for (Map.Entry<String, Integer> entry : roomTypeCount.entrySet()) {
-            System.out.println(entry.getKey() + " bookings: " + entry.getValue());
-        }
-
-        System.out.println("Total Reservations: " + reservations.size());
-        System.out.println("===================================");
     }
 }
 
@@ -174,41 +199,80 @@ class RoomAllocationService {
             Reservation reservation = queue.poll();
             String roomType = reservation.getRoomType();
 
-            if (inventory.getAvailability(roomType) > 0) {
+            try {
+
+                if (!inventory.isValidRoomType(roomType)) {
+                    throw new InvalidBookingException("Invalid Room Type: " + roomType);
+                }
+
+                inventory.decreaseAvailability(roomType);
 
                 String roomId = generateRoomId(roomType);
+
+                reservation.setRoomId(roomId);
 
                 allocatedRooms
                         .computeIfAbsent(roomType, k -> new HashSet<>())
                         .add(roomId);
 
-                inventory.decreaseAvailability(roomType);
-
-                reservation.setRoomId(roomId);   // NEW: save roomId in reservation
                 history.addReservation(reservation);
 
                 System.out.println("Reservation Confirmed!");
                 reservation.displayReservation();
                 System.out.println("----------------------------------");
 
-            } else {
+            } catch (InvalidBookingException e) {
 
-                System.out.println("Reservation Failed for "
-                        + reservation.getGuestName()
-                        + " (No rooms available for " + roomType + ")");
+                System.out.println("Booking Failed for "
+                        + reservation.getGuestName());
+                System.out.println("Reason: " + e.getMessage());
+                System.out.println("----------------------------------");
             }
         }
     }
 }
 
 
+// Cancellation Service
+class CancellationService {
+
+    private Stack<String> rollbackStack = new Stack<>();
+
+    public void cancelBooking(String reservationId,
+                              BookingHistory history,
+                              RoomInventory inventory) {
+
+        Reservation reservation = history.findReservation(reservationId);
+
+        if (reservation == null) {
+            System.out.println("Cancellation Failed: Reservation not found.");
+            return;
+        }
+
+        if (reservation.isCancelled()) {
+            System.out.println("Cancellation Failed: Already cancelled.");
+            return;
+        }
+
+        rollbackStack.push(reservation.getRoomId());
+
+        inventory.increaseAvailability(reservation.getRoomType());
+
+        reservation.cancelReservation();
+
+        System.out.println("\nCancellation Successful for Reservation: " + reservationId);
+        System.out.println("Released Room ID: " + rollbackStack.peek());
+    }
+}
+
+
 // Main Application
-public class UseCase8BookingHistoryReport {
+public class UseCase10BookingCancellation {
 
     public static void main(String[] args) {
 
         String appName = "Book My Stay - Hotel Booking System";
-        String version = "Version 8.1";
+        String version = "Version 10.0";
 
         System.out.println("=====================================");
         System.out.println("Welcome to " + appName);
@@ -219,22 +283,22 @@ public class UseCase8BookingHistoryReport {
         RoomInventory inventory = new RoomInventory();
         BookingHistory history = new BookingHistory();
         RoomAllocationService bookingService = new RoomAllocationService();
+        CancellationService cancellationService = new CancellationService();
 
-        // Booking requests
         requestQueue.addRequest(new Reservation("RES-101", "Alice", "Single Room"));
         requestQueue.addRequest(new Reservation("RES-102", "Bob", "Double Room"));
         requestQueue.addRequest(new Reservation("RES-103", "Charlie", "Suite Room"));
-        requestQueue.addRequest(new Reservation("RES-104", "David", "Single Room"));
 
-        // Process bookings
         bookingService.processBookings(requestQueue, inventory, history);
 
-        // Reporting
         BookingReportService reportService = new BookingReportService();
+        reportService.displayAllBookings(history.getBookings());
+
+        // Cancel booking
+        cancellationService.cancelBooking("RES-102", history, inventory);
 
         reportService.displayAllBookings(history.getBookings());
-        reportService.generateSummary(history.getBookings());
 
-        System.out.println("\nBooking history stored successfully.");
+        System.out.println("\nSystem state restored after cancellation.");
     }
 }
