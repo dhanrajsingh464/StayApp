@@ -6,6 +6,7 @@ class Reservation {
     private String reservationId;
     private String guestName;
     private String roomType;
+    private String roomId;   // NEW: store allocated room id
 
     public Reservation(String reservationId, String guestName, String roomType) {
         this.reservationId = reservationId;
@@ -25,10 +26,19 @@ class Reservation {
         return roomType;
     }
 
+    public void setRoomId(String roomId) {   // NEW
+        this.roomId = roomId;
+    }
+
+    public String getRoomId() {   // NEW
+        return roomId;
+    }
+
     public void displayReservation() {
         System.out.println("Reservation ID: " + reservationId +
                 " | Guest: " + guestName +
-                " | Room Type: " + roomType);
+                " | Room Type: " + roomType +
+                " | Room ID: " + roomId);
     }
 }
 
@@ -174,11 +184,11 @@ class RoomAllocationService {
 
                 inventory.decreaseAvailability(roomType);
 
+                reservation.setRoomId(roomId);   // NEW: save roomId in reservation
                 history.addReservation(reservation);
 
                 System.out.println("Reservation Confirmed!");
                 reservation.displayReservation();
-                System.out.println("Assigned Room ID: " + roomId);
                 System.out.println("----------------------------------");
 
             } else {
